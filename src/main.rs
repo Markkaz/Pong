@@ -36,12 +36,6 @@ enum Paddle {
 }
 
 #[derive(Component)]
-struct Player;
-
-#[derive(Component)]
-struct Computer;
-
-#[derive(Component)]
 struct Ball;
 
 #[derive(Resource)]
@@ -265,7 +259,7 @@ fn move_players(
 ) {
     let ball = balls.single();
 
-    for (mut player, paddle, paddle_position) in players.iter_mut() {
+    for (player, paddle, paddle_position) in players.iter_mut() {
         match paddle {
             Paddle::Player => move_player(player, &keys, &time),
             Paddle::Computer => move_computer(player, paddle_position, ball, &time),
