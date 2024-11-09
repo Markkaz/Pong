@@ -311,8 +311,6 @@ fn speed_up_ball(
     mut velocities: Query<&mut Velocity>,
 ) {
     for entities in collision_events.read().filter_map(|event| {
-        println!("{:?}", event);
-
         match event {
             CollisionEvent::Started(entity1, entity2, _) => Some((*entity1, *entity2)),
             _ => None,
