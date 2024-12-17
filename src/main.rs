@@ -29,13 +29,13 @@ fn quit_game(mut exit: EventWriter<AppExit>) {
 }
 
 fn create_camera(mut commands: Commands) {
-    commands.spawn(Camera2dBundle::default());
+    commands.spawn(Camera2d::default());
 }
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(bevy_framepace::FramepacePlugin)
+        // .add_plugins(bevy_framepace::FramepacePlugin)
         .init_state::<GameState>()
         .add_plugins((
             RapierPhysicsPlugin::<NoUserData>::default(),

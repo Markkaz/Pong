@@ -1,7 +1,6 @@
 use crate::GameState;
 use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
-use bevy::sprite::{MaterialMesh2dBundle, Mesh2dHandle};
 use bevy_rapier2d::rapier::prelude::CollisionEventFlags;
 
 mod constants {
@@ -65,15 +64,10 @@ fn create_wall(
     height: f32,
     transform: Transform
 ) {
-    let shape = Mesh2dHandle(meshes.add(Rectangle::new(width, height)));
-
     commands.spawn((
-        MaterialMesh2dBundle {
-            mesh: shape,
-            material: materials.add(Color::WHITE),
-            transform,
-            ..default()
-        },
+        Mesh2d(meshes.add(Rectangle::new(width, height))),
+        MeshMaterial2d(materials.add(Color::WHITE)),
+        transform,
         Collider::cuboid(width / 2.0, height / 2.0),
         RigidBody::Fixed,
     ));
@@ -110,11 +104,11 @@ fn create_board(
         (screen_width / 2.0 - WALL_THICKNESS, ScoreField::Right),
     ] {
         commands.spawn((
-            TransformBundle::from(Transform::from_xyz(
+            Transform::from_xyz(
                 x_pos,
                 TOP_BUFFER / -2.0,
                 0.0,
-            )),
+            ),
             Collider::cuboid(WALL_THICKNESS, sensor_height / 2.0),
             Sensor,
             score_field,
@@ -130,15 +124,12 @@ fn create_paddle(
     paddle: Paddle,
 ) {
     commands.spawn((
-        MaterialMesh2dBundle {
-            mesh: Mesh2dHandle(meshes.add(Rectangle::new(
-                paddle::WIDTH,
-                paddle::HEIGHT,
-            ))),
-            material: materials.add(Color::WHITE),
-            transform,
-            ..default()
-        },
+        Mesh2d(meshes.add(Rectangle::new(
+            paddle::WIDTH,
+            paddle::HEIGHT,
+        ))),
+        MeshMaterial2d(materials.add(Color::WHITE)),
+        transform,
         Collider::cuboid(paddle::WIDTH / 2.0, paddle::HEIGHT / 2.0),
         RigidBody::KinematicPositionBased,
         KinematicCharacterController::default(),
@@ -178,15 +169,17 @@ fn create_ball(
 
 fn create_score(mut commands: Commands) {
     commands.spawn((
-        TextBundle::from_section(
-            "0 - 0",
-            TextStyle { font_size: 100.0, ..default() },
-        )
-            .with_text_justify(JustifyText::Center)
-            .with_style(Style {
-                width: Val::Percent(100.0),
-                ..default()
-            }),
+        Node {
+            width: Val::Percent(100.),
+            justify_content: JustifyContent::Center,
+            ..default()
+        },
+    )).with_child((
+          Text::new("0 - 0"),
+          TextFont {
+              font_size: 100.,
+              ..default()
+          },
     ));
 }
 
@@ -195,32 +188,29 @@ fn spawn_ball(
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>
 ) {
-    commands.spawn(MaterialMesh2dBundle {
-        mesh: Mesh2dHandle(meshes.add(Circle::new(ball::RADIUS))),
-        material: materials.add(Color::WHITE),
-        ..default()
-    })
-        .insert((
-            Ball,
-            RigidBody::Dynamic,
-            Ccd::enabled(),
-            Velocity {
-                linvel: Vec2::new(ball::INITIAL_VELOCITY.0, ball::INITIAL_VELOCITY.1),
-                angvel: 0.0,
-            },
-            GravityScale(0.0),
-            Sleeping::disabled(),
-            Collider::ball(ball::RADIUS),
-            Restitution {
-                coefficient: 1.0,
-                combine_rule: CoefficientCombineRule::Max,
-            },
-            Friction {
-                coefficient: 0.0,
-                combine_rule: CoefficientCombineRule::Min,
-            },
-            ActiveEvents::COLLISION_EVENTS,
-        ));
+    commands.spawn((
+        Mesh2d(meshes.add(Circle::new(ball::RADIUS))),
+        MeshMaterial2d(materials.add(Color::WHITE)),
+        Ball,
+        RigidBody::Dynamic,
+        Ccd::enabled(),
+        Velocity {
+            linvel: Vec2::new(ball::INITIAL_VELOCITY.0, ball::INITIAL_VELOCITY.1),
+            angvel: 0.,
+        },
+        GravityScale(0.),
+        Sleeping::disabled(),
+        Collider::ball(ball::RADIUS),
+        Restitution {
+            coefficient: 1.,
+            combine_rule: CoefficientCombineRule::Max,
+        },
+        Friction {
+            coefficient: 0.,
+            combine_rule: CoefficientCombineRule::Min,
+        },
+        ActiveEvents::COLLISION_EVENTS,
+    ));
 }
 
 fn move_players(
@@ -253,7 +243,7 @@ fn move_player(
         direction.y -= 1.0;
     }
 
-    player.translation = Some(direction.normalize_or_zero() * paddle::SPEED * time.delta_seconds());
+    player.translation = Some(direction.normalize_or_zero() * paddle::SPEED * time.delta_secs());
 }
 
 fn move_computer(
@@ -268,7 +258,7 @@ fn move_computer(
     );
 
     player.translation = Some(
-        direction.clamp_length_max(paddle::SPEED) * time.delta_seconds(),
+        direction.clamp_length_max(paddle::SPEED) * time.delta_secs(),
     );
 }
 
@@ -326,7 +316,7 @@ fn score_point(
 
 fn update_score_display(score: Res<Score>, mut score_text: Query<&mut Text>) {
     for mut text in &mut score_text {
-        text.sections[0].value = format!("{} - {}", score.player, score.computer);
+        text.0 = format!("{} - {}", score.player, score.computer);
     }
 }
 

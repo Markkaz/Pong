@@ -16,7 +16,7 @@ use constants::*;
 struct MenuButton {
     text: String,
     action: GameState,
-    style: Option<Style>,
+    style: Option<Node>,
     enabled: bool,
 }
 
@@ -25,7 +25,7 @@ struct ButtonAction(GameState);
 
 #[derive(Default)]
 struct MenuBuilder {
-    style: Style,
+    style: Node,
     background_color: Option<Color>,
     buttons: Vec<MenuButton>,
     title: Option<String>,
@@ -35,7 +35,7 @@ struct MenuBuilder {
 impl MenuBuilder {
     fn new() -> Self {
         Self {
-            style: Style {
+            style: Node {
                 width: Val::Percent(100.),
                 height: Val::Percent(100.),
                 justify_content: JustifyContent::Center,
@@ -81,7 +81,7 @@ impl MenuBuilder {
         mut self,
         text: impl Into<String>,
         action: GameState,
-        style: Style,
+        style: Node,
         enabled: bool,
     ) -> Self {
         self.buttons.push(MenuButton {
@@ -94,34 +94,29 @@ impl MenuBuilder {
     }
 
     fn build(self, commands: &mut Commands) -> Entity {
-        let root = commands
-            .spawn(NodeBundle {
-                style: self.style,
-                background_color: self.background_color.map(|c| c.into()).unwrap_or_default(),
-                ..default()
-            })
-            .with_children(|parent| {
-                if let Some(title) = self.title {
-                    parent.spawn(TextBundle::from_section(
-                        title,
-                        TextStyle {
-                            font_size: 48.,
-                            color: Color::WHITE,
-                            ..default()
-                        }
-                    ));
 
-                    parent.spawn(NodeBundle {
-                        style: Style {
-                            height: Val::Px(self.spacing),
+        let root = commands.spawn((
+            self.style,
+            BackgroundColor(self.background_color.map(|c| c.into()).unwrap_or_default()),
+        )).with_children(|parent| {
+                if let Some(title) = self.title {
+                    parent.spawn((
+                        Text::new(title),
+                        TextFont {
+                            font_size: 48.,
                             ..default()
                         },
+                        TextColor(Color::WHITE),
+                    ));
+
+                    parent.spawn(Node {
+                        height: Val::Px(self.spacing),
                         ..default()
                     });
                 }
 
                 for button in self.buttons {
-                    let button_style = button.style.unwrap_or(Style {
+                    let button_style = button.style.unwrap_or(Node {
                         width: Val::Px(200.),
                         height: Val::Px(50.),
                         justify_content: JustifyContent::Center,
@@ -129,26 +124,26 @@ impl MenuBuilder {
                         margin: UiRect::all(Val::Px(5.)),
                         ..default()
                     });
-                    parent.spawn(ButtonBundle {
-                        style: button_style,
-                        background_color: if button.enabled {
-                            Color::srgb(0.25, 0.25, 0.25).into()
+
+                    parent.spawn((
+                        Button,
+                        button_style,
+                        if button.enabled {
+                            BackgroundColor(Color::srgb(0.25, 0.25, 0.25))
                         } else {
-                            Color::srgb(0.5, 0.5, 0.5).into()
-                        },
-                        ..default()
-                    })
-                        .with_children(|parent| {
-                            parent.spawn(TextBundle::from_section(
-                                button.text,
-                                TextStyle {
+                            BackgroundColor(Color::srgb(0.5, 0.5, 0.5))
+                        }
+                    )).with_children(|parent| {
+                            parent.spawn((
+                                Text(button.text),
+                                TextFont {
                                     font_size: 24.,
-                                    color: if button.enabled {
-                                        Color::WHITE
-                                    } else {
-                                        Color::srgb(0.5, 0.5, 0.5)
-                                    },
                                     ..default()
+                                },
+                                if button.enabled {
+                                    TextColor(Color::WHITE)
+                                } else {
+                                    TextColor(Color::srgb(0.5, 0.5, 0.5).into())
                                 }
                             ));
                         })
@@ -210,7 +205,7 @@ impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
         app.configure_sets(Update, MenuUpdateSet.run_if(
             in_state(GameState::Menu)
-                .or_else(in_state(GameState::Settings))
+                .or(in_state(GameState::Settings))
         ));
         app.add_systems(OnEnter(GameState::Menu), spawn_main_menu);
         app.add_systems(OnExit(GameState::Menu), despawn_state);
