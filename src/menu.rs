@@ -1,217 +1,254 @@
 use bevy::prelude::*;
-use crate::{despawn_state, quit_game, GameState, RootEntity};
+use bevy::state::state::FreelyMutableState;
+use bevy_egui::{egui, EguiContexts};
+use bevy_egui::egui::Color32;
 
-mod constants {
-    pub mod menu {
-        use bevy::color::Color;
+pub trait MenuAction {
+    fn execute(&self, commands: &mut Commands);
+}
 
-        pub const NORMAL: Color = Color::srgb(0.15, 0.15, 0.15);
-        pub const HOVERED: Color = Color::srgb(0.25, 0.25, 0.25);
-        pub const PRESSED: Color = Color::srgb(0.35, 0.35, 0.35);
+pub struct ChangeStateMenuAction<State: FreelyMutableState> {
+    next_state: State,
+}
+
+impl<State: FreelyMutableState> ChangeStateMenuAction<State> {
+    pub fn new(next_state: State) -> Self {
+        Self { next_state }
     }
 }
 
-use constants::*;
-
-struct MenuButton {
-    text: String,
-    action: GameState,
-    style: Option<Node>,
-    enabled: bool,
+impl<State: FreelyMutableState> MenuAction for ChangeStateMenuAction<State> {
+    fn execute(&self, commands: &mut Commands) {
+        commands.set_state(self.next_state.clone());
+    }
 }
 
-#[derive(Component)]
-struct ButtonAction(GameState);
+pub struct UpdateResourceMenuAction<R: Resource + Copy> {
+    resource: R,
+}
 
-#[derive(Default)]
-struct MenuBuilder {
-    style: Node,
-    background_color: Option<Color>,
-    buttons: Vec<MenuButton>,
-    title: Option<String>,
-    spacing: f32,
+impl<R: Resource + Copy> UpdateResourceMenuAction<R> {
+    pub fn new(resource: R) -> Self {
+        Self { resource }
+    }
+}
+
+impl<R: Resource + Copy> MenuAction for UpdateResourceMenuAction<R> {
+    fn execute(&self, commands: &mut Commands) {
+        commands.insert_resource(self.resource);
+    }
+}
+
+pub struct QuitMenuAction;
+
+impl MenuAction for QuitMenuAction {
+    fn execute(&self, commands: &mut Commands) {
+        commands.send_event(AppExit::Success);
+    }
+}
+
+pub struct MenuBuilder {
+    heading: String,
+    components: Vec<Box<dyn MenuComponent>>,
 }
 
 impl MenuBuilder {
-    fn new() -> Self {
+    pub fn new(heading: impl Into<String>) -> Self {
         Self {
-            style: Node {
-                width: Val::Percent(100.),
-                height: Val::Percent(100.),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                flex_direction: FlexDirection::Column,
-                ..default()
-            },
-            ..default()
+            heading: heading.into(),
+            components: Vec::new(),
         }
     }
 
-    fn with_background(mut self, color: Color) -> Self {
-        self.background_color = Some(color);
+    pub fn add_component(mut self, component: impl MenuComponent + 'static) -> Self {
+        self.components.push(Box::new(component));
         self
     }
 
-    fn with_title(mut self, title: impl Into<String>) -> Self {
-        self.title = Some(title.into());
-        self
-    }
+    pub fn build(mut self, mut contexts: EguiContexts, commands: &mut Commands) {
+        let ctx = contexts.ctx_mut();
 
-    fn with_spacing(mut self, spacing: f32) -> Self {
-        self.spacing = spacing;
-        self
-    }
+        ctx.style_mut(|style| {
+            style.visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(70, 70, 70);
+            style.visuals.widgets.inactive.weak_bg_fill = egui::Color32::from_rgb(70, 70, 70);
+            style.visuals.widgets.inactive.fg_stroke = egui::Stroke::NONE;
+            style.visuals.widgets.inactive.bg_stroke = egui::Stroke::NONE;
 
-    fn add_button(
-        mut self,
-        text: impl Into<String>,
-        action: GameState,
-        enabled: bool,
-    ) -> Self {
-        self.buttons.push(MenuButton {
-            text: text.into(),
-            action,
-            style: None,
-            enabled,
+
+            style.visuals.widgets.active.bg_fill = egui::Color32::from_rgb(50, 50, 50);
+            style.visuals.widgets.active.weak_bg_fill = egui::Color32::from_rgb(50, 50, 50);
+            style.visuals.widgets.active.fg_stroke = egui::Stroke::NONE;
+            style.visuals.widgets.active.bg_stroke = egui::Stroke::NONE;
+
+            style.visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(120, 120, 120);
+            style.visuals.widgets.hovered.weak_bg_fill = egui::Color32::from_rgb(120, 120, 120);
+            style.visuals.widgets.hovered.fg_stroke = egui::Stroke::NONE;
+            style.visuals.widgets.hovered.bg_stroke = egui::Stroke::NONE;
         });
-        self
-    }
 
-    fn add_styled_button(
-        mut self,
-        text: impl Into<String>,
-        action: GameState,
-        style: Node,
-        enabled: bool,
-    ) -> Self {
-        self.buttons.push(MenuButton {
-            text: text.into(),
-            action,
-            style: Some(style),
-            enabled,
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.vertical_centered(|ui| {
+                ui.add_space(200.);
+
+                ui.heading(egui::RichText::new(&self.heading)
+                    .size(48.)
+                    .color(egui::Color32::WHITE)
+                    .strong());
+                ui.add_space(40.);
+
+                for component in &mut self.components {
+                    component.build(ui, commands);
+                    ui.add_space(10.);
+                }
+            });
         });
+    }
+}
+
+pub trait MenuComponent {
+    fn build(&mut self, ui: &mut egui::Ui, commands: &mut Commands);
+}
+
+pub struct MenuLayoutHorizontal {
+    components: Vec<Box<dyn MenuComponent>>,
+}
+
+impl MenuLayoutHorizontal {
+    pub fn new() -> Self {
+        Self { components: Vec::new() }
+    }
+
+    pub fn add_component(mut self, component: impl MenuComponent + 'static) -> Self {
+        self.components.push(Box::new(component));
         self
     }
+}
 
-    fn build(self, commands: &mut Commands) -> Entity {
-
-        let root = commands.spawn((
-            self.style,
-            BackgroundColor(self.background_color.map(|c| c.into()).unwrap_or_default()),
-        )).with_children(|parent| {
-                if let Some(title) = self.title {
-                    parent.spawn((
-                        Text::new(title),
-                        TextFont {
-                            font_size: 48.,
-                            ..default()
-                        },
-                        TextColor(Color::WHITE),
-                    ));
-
-                    parent.spawn(Node {
-                        height: Val::Px(self.spacing),
-                        ..default()
-                    });
-                }
-
-                for button in self.buttons {
-                    let button_style = button.style.unwrap_or(Node {
-                        width: Val::Px(200.),
-                        height: Val::Px(50.),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        margin: UiRect::all(Val::Px(5.)),
-                        ..default()
-                    });
-
-                    parent.spawn((
-                        Button,
-                        button_style,
-                        if button.enabled {
-                            BackgroundColor(Color::srgb(0.25, 0.25, 0.25))
-                        } else {
-                            BackgroundColor(Color::srgb(0.5, 0.5, 0.5))
-                        }
-                    )).with_children(|parent| {
-                            parent.spawn((
-                                Text(button.text),
-                                TextFont {
-                                    font_size: 24.,
-                                    ..default()
-                                },
-                                if button.enabled {
-                                    TextColor(Color::WHITE)
-                                } else {
-                                    TextColor(Color::srgb(0.5, 0.5, 0.5).into())
-                                }
-                            ));
-                        })
-                        .insert(ButtonAction(button.action));
-                }
-            })
-            .id();
-        root
+impl MenuComponent for MenuLayoutHorizontal {
+    fn build(&mut self, ui: &mut egui::Ui, commands: &mut Commands) {
+        let layout = egui::Layout::centered_and_justified(egui::Direction::LeftToRight);
+        ui.allocate_ui_with_layout(
+            [self.components.len() as f32 * 205., 50.].into(),
+            layout,
+            |ui| {
+                ui.horizontal(|ui| {
+                    for component in &mut self.components {
+                        component.build(ui, commands);
+                    }
+                });
+            });
     }
 }
 
-fn spawn_main_menu(mut commands: Commands) {
-    let entity = MenuBuilder::new()
-        .with_title("Pong!")
-        .with_spacing(20.)
-        .with_background(Color::srgb(0., 0., 0.,))
-        .add_button("Play", GameState::Playing, true)
-        .add_button("Settings", GameState::Settings, true)
-        .add_button("Exit", GameState::Exit, true)
-        .build(&mut commands);
-    commands.insert_resource(RootEntity(entity));
+pub struct MenuLabel {
+    label: String,
 }
 
-fn spawn_settings_menu(mut commands: Commands) {
-    let entity = MenuBuilder::new()
-        .with_title("Settings")
-        .with_spacing(20.)
-        .with_background(Color::srgb(0., 0., 0.))
-        .add_button("Back", GameState::Menu, true)
-        .build(&mut commands);
-    commands.insert_resource(RootEntity(entity));
+impl MenuLabel {
+    pub fn new(label: impl Into<String>) -> Self {
+        Self { label: label.into() }
+    }
 }
 
-fn update_menu(
-    mut interaction_query: Query<
-        (&ButtonAction, &Interaction, &mut BackgroundColor),
-        (Changed<Interaction>, With<Button>),
-    >,
-    mut game_state: ResMut<NextState<GameState>>,
-) {
-    for (action, interaction, mut color) in &mut interaction_query {
-        match *interaction {
-            Interaction::Pressed => {
-                *color = menu::PRESSED.into();
-                game_state.set(action.0.clone());
-            },
-            Interaction::Hovered => *color = menu::HOVERED.into(),
-            Interaction::None => *color = menu::NORMAL.into(),
+impl MenuComponent for MenuLabel {
+    fn build(&mut self, ui: &mut egui::Ui, _commands: &mut Commands) {
+        ui.add_sized(
+            egui::Vec2::new(200., 50.),
+            egui::Label::new(egui::RichText::new(&self.label).color(Color32::WHITE).size(24.)),
+        );
+    }
+}
+
+pub struct MenuButton {
+    label: String,
+    action: Box<dyn MenuAction>,
+}
+
+impl MenuButton {
+    pub fn new(label: impl Into<String>, action: impl MenuAction + 'static) -> Self {
+        Self {
+            label: label.into(),
+            action: Box::new(action),
         }
     }
 }
 
-pub struct MenuPlugin;
+impl MenuComponent for MenuButton {
+    fn build(&mut self, ui: &mut egui::Ui, commands: &mut Commands) {
+        if ui.add_sized(
+            egui::Vec2::new(200., 50.),
+            egui::Button::new(
+                egui::RichText::new(&self.label)
+                    .size(24.)
+                    .color(egui::Color32::WHITE)
+            )
+        ).clicked() {
+            self.action.execute(commands);
+        }
+    }
+}
 
-#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
-struct MenuUpdateSet;
+pub struct MenuOptions {
+    label: String,
+    options: Vec<MenuChoice>,
+}
 
-impl Plugin for MenuPlugin {
-    fn build(&self, app: &mut App) {
-        app.configure_sets(Update, MenuUpdateSet.run_if(
-            in_state(GameState::Menu)
-                .or(in_state(GameState::Settings))
-        ));
-        app.add_systems(OnEnter(GameState::Menu), spawn_main_menu);
-        app.add_systems(OnExit(GameState::Menu), despawn_state);
-        app.add_systems(OnEnter(GameState::Exit), quit_game);
-        app.add_systems(OnEnter(GameState::Settings), spawn_settings_menu);
-        app.add_systems(OnExit(GameState::Settings), despawn_state);
-        app.add_systems(Update, update_menu.in_set(MenuUpdateSet));
+impl MenuOptions {
+    pub fn new(label: impl Into<String>) -> Self {
+        Self { label: label.into(), options: Vec::new() }
+    }
+
+    pub fn add_option(mut self, label: impl Into<String>, selected: bool, action: impl MenuAction + 'static) -> Self {
+        self.options.push(
+            MenuChoice {
+                label: label.into(),
+                selected,
+                action: Box::new(action),
+            }
+        );
+        self
+    }
+}
+
+impl MenuComponent for MenuOptions {
+    fn build(&mut self, ui: &mut egui::Ui, commands: &mut Commands) {
+        let layout = egui::Layout::centered_and_justified(egui::Direction::LeftToRight);
+        ui.allocate_ui_with_layout(
+            [(self.options.len() as f32 + 1.) * 205., 50.].into(),
+            layout,
+            |ui| {
+                ui.horizontal(|ui| {
+                    ui.add_sized(
+                        [200., 50.],
+                        egui::Label::new(egui::RichText::new(&self.label).size(24.).color(egui::Color32::WHITE))
+                    );
+
+                    for option in &mut self.options {
+                        option.render(ui, commands);
+                    }
+                });
+            });
+
+        ui.add_space(20.);
+    }
+}
+
+struct MenuChoice {
+    label: String,
+    selected: bool,
+    action: Box<dyn MenuAction>,
+}
+
+impl MenuChoice {
+    fn render(&mut self, ui: &mut egui::Ui, commands: &mut Commands) {
+        if ui.add_sized(
+            egui::Vec2::new(200., 50.),
+            egui::SelectableLabel::new(
+                self.selected,
+                egui::RichText::new(&self.label).size(24.).color(egui::Color32::WHITE)
+            )
+        ).clicked() {
+            self.action.execute(commands);
+        }
     }
 }

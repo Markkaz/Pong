@@ -1,4 +1,4 @@
-use crate::GameState;
+use crate::{Difficulty, GameState};
 use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
 use bevy_rapier2d::rapier::prelude::CollisionEventFlags;
@@ -11,7 +11,7 @@ mod constants {
         pub const WIDTH: f32 = 10.0;
         pub const HEIGHT: f32 = 100.0;
         pub const BUFFER: f32 = 40.0;
-        pub const SPEED: f32 = 400.0;
+        pub const SPEED: f32 = 6.;
     }
 
     pub mod ball {
@@ -215,16 +215,16 @@ fn spawn_ball(
 
 fn move_players(
     keys: Res<ButtonInput<KeyCode>>,
+    difficulty: Res<Difficulty>,
     mut players: Query<(&mut KinematicCharacterController, &Paddle, &Transform)>,
     balls: Query<&Transform, With<Ball>>,
-    time: Res<Time>,
 ) {
     let ball = balls.single();
 
     for (player, paddle, paddle_position) in players.iter_mut() {
         match paddle {
-            Paddle::Player => move_player(player, &keys, &time),
-            Paddle::Computer => move_computer(player, paddle_position, ball, &time),
+            Paddle::Player => move_player(player, &keys),
+            Paddle::Computer => move_computer(player, paddle_position, ball, *difficulty),
         }
     }
 }
@@ -232,7 +232,6 @@ fn move_players(
 fn move_player(
     mut player: Mut<KinematicCharacterController>,
     keys: &Res<ButtonInput<KeyCode>>,
-    time: &Res<Time>,
 ) {
     let mut direction = Vec2::ZERO;
 
@@ -243,14 +242,14 @@ fn move_player(
         direction.y -= 1.0;
     }
 
-    player.translation = Some(direction.normalize_or_zero() * paddle::SPEED * time.delta_secs());
+    player.translation = Some(direction.normalize_or_zero() * paddle::SPEED);
 }
 
 fn move_computer(
     mut player: Mut<KinematicCharacterController>,
     paddle_position: &Transform,
     ball: &Transform,
-    time: &Res<Time>,
+    difficulty: Difficulty,
 ) {
     let direction = Vec2::new(
         0.0,
@@ -258,7 +257,7 @@ fn move_computer(
     );
 
     player.translation = Some(
-        direction.clamp_length_max(paddle::SPEED) * time.delta_secs(),
+        direction.clamp_length_max(difficulty.speed()),
     );
 }
 
@@ -342,6 +341,7 @@ impl Plugin for PongPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Score>()
             .configure_sets(Update, PongUpdateSet.run_if(in_state(GameState::Playing)))
+            .configure_sets(FixedUpdate, PongUpdateSet.run_if(in_state(GameState::Playing)))
             .add_event::<ScorePointEvent>()
             .add_systems(OnEnter(GameState::Playing), (
                 create_board,
@@ -349,8 +349,8 @@ impl Plugin for PongPlugin {
                 create_ball,
                 create_score,
             ))
+            .add_systems(FixedUpdate, move_players.in_set(PongUpdateSet))
             .add_systems(Update, (
-                move_players,
                 speed_up_ball,
                 detect_point,
             ).in_set(PongUpdateSet))
