@@ -2,6 +2,7 @@ mod menu;
 mod pong;
 
 use bevy::prelude::*;
+use bevy::window::PresentMode;
 use bevy_egui::{EguiContexts, EguiPlugin};
 use bevy_rapier2d::prelude::*;
 
@@ -92,7 +93,19 @@ fn settings_menu(
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
+        .add_plugins(
+            DefaultPlugins.set(
+                WindowPlugin {
+                    primary_window: Some(
+                        Window {
+                            present_mode: PresentMode::AutoNoVsync,
+                            ..default()
+                        }
+                    ),
+                    ..default()
+                }
+            )
+        )
         .add_plugins((
             EguiPlugin,
             RapierPhysicsPlugin::<NoUserData>::default(),
