@@ -13,3 +13,4 @@ opt-level = 3
 bevy = "0.15"
 bevy_rapier2d = "0.28"
 bevy_egui = "0.31"
+leafwing-input-manager = "0.16"

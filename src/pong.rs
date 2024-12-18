@@ -1,7 +1,8 @@
-use crate::{Difficulty, GameState};
+use crate::{Controls, Difficulty, GameState, PausedState};
 use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
 use bevy_rapier2d::rapier::prelude::CollisionEventFlags;
+use leafwing_input_manager::prelude::ActionState;
 
 mod constants {
     pub const WALL_THICKNESS: f32 = 10.0;
@@ -22,6 +23,9 @@ mod constants {
 }
 
 use constants::*;
+
+#[derive(Component)]
+struct Pong;
 
 #[derive(Component)]
 enum ScoreField {
@@ -56,8 +60,55 @@ impl Default for Score {
 #[derive(Event)]
 struct ScorePointEvent(Entity);
 
+fn setup_game(
+    mut commands: Commands,
+    windows: Query<&Window>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut score: ResMut<Score>,
+    mut next_state: ResMut<NextState<PausedState>>,
+) {
+
+    score.player = 0;
+    score.computer = 0;
+    next_state.set(PausedState::Playing);
+
+    let window = windows.single();
+    let (window_width, window_height) = (window.resolution.width(), window.resolution.height());
+
+    commands.spawn((
+        Pong,
+        Transform::from_xyz(0., 0., 0.),
+        Visibility::default(),
+    )).with_children(|builder| {
+        create_board(
+            builder,
+            window_width,
+            window_height,
+            &mut meshes,
+            &mut materials,
+        );
+
+        create_players(
+            builder,
+            window_width,
+            &mut meshes,
+            &mut materials,
+        );
+
+        spawn_ball(
+            builder,
+            &mut meshes,
+            &mut materials,
+        );
+
+        create_score(builder, window_height);
+    });
+
+}
+
 fn create_wall(
-    commands: &mut Commands,
+    commands: &mut ChildBuilder,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
     width: f32,
@@ -74,23 +125,21 @@ fn create_wall(
 }
 
 fn create_board(
-    mut commands: Commands,
-    windows: Query<&Window>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
+    builder: &mut ChildBuilder,
+    screen_width: f32,
+    screen_height: f32,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<ColorMaterial>>,
 ) {
-    let window = windows.single();
-    let (screen_width, screen_height) = (window.resolution.width(), window.resolution.height());
-
     // Create horizontal walls
     for y_pos in [
         screen_height / 2.0 - WALL_THICKNESS - TOP_BUFFER,
         screen_height / -2.0 + WALL_THICKNESS,
     ] {
         create_wall(
-            &mut commands,
-            &mut meshes,
-            &mut materials,
+            builder,
+            meshes,
+            materials,
             screen_width,
             WALL_THICKNESS,
             Transform::from_xyz(0.0, y_pos, 0.0),
@@ -103,7 +152,7 @@ fn create_board(
         (screen_width / -2.0 + WALL_THICKNESS, ScoreField::Left),
         (screen_width / 2.0 - WALL_THICKNESS, ScoreField::Right),
     ] {
-        commands.spawn((
+        builder.spawn((
             Transform::from_xyz(
                 x_pos,
                 TOP_BUFFER / -2.0,
@@ -117,13 +166,13 @@ fn create_board(
 }
 
 fn create_paddle(
-    commands: &mut Commands,
+    builder: &mut ChildBuilder,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
     transform: Transform,
     paddle: Paddle,
 ) {
-    commands.spawn((
+    builder.spawn((
         Mesh2d(meshes.add(Rectangle::new(
             paddle::WIDTH,
             paddle::HEIGHT,
@@ -138,57 +187,40 @@ fn create_paddle(
 }
 
 fn create_players(
-    mut commands: Commands,
-    windows: Query<&Window>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
+    builder: &mut ChildBuilder,
+    screen_width: f32,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<ColorMaterial>>,
 ) {
-    let screen_width = windows.single().resolution.width();
-
     for (x_offset, paddle_type) in [
         (screen_width / -2.0 + paddle::BUFFER, Paddle::Player),
         (screen_width / 2.0 - paddle::BUFFER, Paddle::Computer),
     ] {
         create_paddle(
-            &mut commands,
-            &mut meshes,
-            &mut materials,
+            builder,
+            meshes,
+            materials,
             Transform::from_xyz(x_offset, TOP_BUFFER / -2.0, 0.0),
             paddle_type,
         );
     }
 }
 
-fn create_ball(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-) {
-    spawn_ball(&mut commands, &mut meshes, &mut materials);
-}
-
-fn create_score(mut commands: Commands) {
-    commands.spawn((
-        Node {
-            width: Val::Percent(100.),
-            justify_content: JustifyContent::Center,
-            ..default()
-        },
-    )).with_child((
-          Text::new("0 - 0"),
-          TextFont {
-              font_size: 100.,
-              ..default()
-          },
+fn create_score(builder: &mut ChildBuilder, window_height: f32) {
+    builder.spawn((
+        Text2d::new("0 - 0"),
+        TextColor(Color::WHITE),
+        TextFont { font_size: 100., ..default() },
+        Transform::from_translation((window_height / 2.0 - 50.) * Vec3::Y),
     ));
 }
 
 fn spawn_ball(
-    commands: &mut Commands,
+    builder: &mut ChildBuilder,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>
 ) {
-    commands.spawn((
+    builder.spawn((
         Mesh2d(meshes.add(Circle::new(ball::RADIUS))),
         MeshMaterial2d(materials.add(Color::WHITE)),
         Ball,
@@ -214,7 +246,7 @@ fn spawn_ball(
 }
 
 fn move_players(
-    keys: Res<ButtonInput<KeyCode>>,
+    keys: Res<ActionState<Controls>>,
     difficulty: Res<Difficulty>,
     mut players: Query<(&mut KinematicCharacterController, &Paddle, &Transform)>,
     balls: Query<&Transform, With<Ball>>,
@@ -231,14 +263,14 @@ fn move_players(
 
 fn move_player(
     mut player: Mut<KinematicCharacterController>,
-    keys: &Res<ButtonInput<KeyCode>>,
+    keys: &Res<ActionState<Controls>>,
 ) {
     let mut direction = Vec2::ZERO;
 
-    if keys.pressed(KeyCode::ArrowUp) {
+    if keys.pressed(&Controls::Up) {
         direction.y += 1.0;
     }
-    if keys.pressed(KeyCode::ArrowDown) {
+    if keys.pressed(&Controls::Down) {
         direction.y -= 1.0;
     }
 
@@ -313,7 +345,7 @@ fn score_point(
     }
 }
 
-fn update_score_display(score: Res<Score>, mut score_text: Query<&mut Text>) {
+fn update_score_display(score: Res<Score>, mut score_text: Query<&mut Text2d>) {
     for mut text in &mut score_text {
         text.0 = format!("{} - {}", score.player, score.computer);
     }
@@ -324,11 +356,22 @@ fn reset_ball(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
-    query: Query<Entity, With<Ball>>,
+    ball_entity: Query<Entity, With<Ball>>,
+    pong_entity: Query<Entity, With<Pong>>,
 ) {
     for _ in score_point_event.read() {
-        commands.entity(query.single()).despawn();
-        spawn_ball(&mut commands, &mut meshes, &mut materials);
+        commands.entity(ball_entity.single()).despawn();
+
+        let pong = pong_entity.single();
+        commands.entity(pong).with_children(|parent| {
+            spawn_ball(parent, &mut meshes, &mut materials);
+        });
+    }
+}
+
+fn cleanup_game(mut commands: Commands, pong: Query<Entity, With<Pong>>) {
+    for entity in pong.iter() {
+        commands.entity(entity).despawn_recursive();
     }
 }
 
@@ -343,18 +386,12 @@ impl Plugin for PongPlugin {
             .configure_sets(Update, PongUpdateSet.run_if(in_state(GameState::Playing)))
             .configure_sets(FixedUpdate, PongUpdateSet.run_if(in_state(GameState::Playing)))
             .add_event::<ScorePointEvent>()
-            .add_systems(OnEnter(GameState::Playing), (
-                create_board,
-                create_players,
-                create_ball,
-                create_score,
-            ))
-            .add_systems(FixedUpdate, move_players.in_set(PongUpdateSet))
+            .add_systems(OnEnter(GameState::Playing), setup_game)
+            .add_systems(OnExit(GameState::Playing), cleanup_game)
             .add_systems(Update, (
+                move_players,
                 speed_up_ball,
                 detect_point,
-            ).in_set(PongUpdateSet))
-            .add_systems(Update, (
                 score_point,
                 update_score_display,
                 reset_ball,
