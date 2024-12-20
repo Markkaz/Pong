@@ -388,8 +388,8 @@ impl Plugin for PongPlugin {
             .add_event::<ScorePointEvent>()
             .add_systems(OnEnter(GameState::Playing), setup_game)
             .add_systems(OnExit(GameState::Playing), cleanup_game)
+            .add_systems(FixedUpdate, move_players.in_set(PongUpdateSet))
             .add_systems(Update, (
-                move_players,
                 speed_up_ball,
                 detect_point,
                 score_point,
