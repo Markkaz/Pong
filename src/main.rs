@@ -6,7 +6,7 @@ use bevy::window::PresentMode;
 use bevy_egui::{EguiContexts, EguiPlugin};
 use bevy_rapier2d::prelude::*;
 use leafwing_input_manager::prelude::*;
-
+use crate::menu::{MenuAction};
 use crate::pong::PongPlugin;
 
 #[derive(States, Default, Debug, Clone, PartialEq, Eq, Hash)]
@@ -40,6 +40,31 @@ impl Controls {
         input_map.insert(Self::Menu, KeyCode::Escape);
 
         input_map
+    }
+}
+
+#[derive(Resource, Default)]
+struct ControlMapping {
+    current_mapping: Option<Controls>,
+    is_listening: bool,
+}
+
+impl ControlMapping {
+    fn new(control: Controls) -> Self {
+        Self {
+            current_mapping: Some(control),
+            is_listening: true,
+        }
+    }
+}
+
+struct MapControlAction {
+    control: Controls,
+}
+
+impl MenuAction for MapControlAction {
+    fn execute(&self, commands: &mut Commands) {
+        commands.insert_resource(ControlMapping::new(self.control));
     }
 }
 
@@ -112,8 +137,67 @@ fn settings_menu(
                 menu::UpdateResourceMenuAction::new(Difficulty::Impossible)
             )
     ).add_component(
+        menu::MenuButton::new("Controls", menu::ChangeStateMenuAction::new(GameState::Controls)),
+    ).add_component(
         menu::MenuButton::new("Back", menu::ChangeStateMenuAction::new(GameState::Main)),
     ).build(contexts, &mut commands);
+}
+
+fn init_controls_menu(mut commands: Commands) {
+    commands.insert_resource(ControlMapping::default());
+}
+
+fn destroy_controls_menu(mut commands: Commands) {
+    commands.remove_resource::<ControlMapping>();
+}
+
+fn controls_menu(
+    mut commands: Commands,
+    contexts: EguiContexts,
+    keys: Res<InputMap<Controls>>,
+) {
+    let editable_controls = [Controls::Up, Controls::Down, Controls::Menu];
+
+    let mut builder = menu::MenuBuilder::new("Controls");
+
+    for control in editable_controls {
+        let current_keys = keys.get(&control)
+            .map(|key_set| {
+                key_set.iter().filter_map(|key| {
+                    match key {
+                        UserInputWrapper::Button(button) => Some(format!("{:?}", button)),
+                        _ => None,
+                    }
+                }).collect::<Vec<String>>().join(", ")
+            }).unwrap_or_else(|| "[Not Set]".to_string());
+
+        builder = builder.add_component(
+            menu::MenuLayoutHorizontal::new()
+                .add_component(menu::MenuLabel::new(format!("{:?}", control)))
+                .add_component(menu::MenuButton::new(current_keys, MapControlAction { control })),
+        );
+    }
+
+    builder.add_component(
+        menu::MenuButton::new("Back", menu::ChangeStateMenuAction::new(GameState::Settings)),
+    ).build(contexts, &mut commands);
+}
+
+fn listen_for_keys(
+    mut mapping: ResMut<ControlMapping>,
+    mut key_map: ResMut<InputMap<Controls>>,
+    keys: Res<ButtonInput<KeyCode>>,
+) {
+    if mapping.is_listening && mapping.current_mapping.is_some() {
+        if let Some(control) = mapping.current_mapping {
+            for key in keys.get_pressed() {
+                key_map.clear_action(&control);
+                key_map.insert(control, *key);
+
+                mapping.is_listening = false;
+            }
+        }
+    }
 }
 
 fn toggle_pause_game(
@@ -177,9 +261,12 @@ fn main() {
         .insert_resource(Controls::default_input_map())
         .insert_resource(Difficulty::default())
         .add_systems(Startup, create_camera)
+        .add_systems(OnEnter(GameState::Controls), init_controls_menu)
+        .add_systems(OnExit(GameState::Controls), destroy_controls_menu)
         .add_systems(Update, (
             main_menu.in_set(MainSet),
             settings_menu.in_set(SettingsSet),
+            (controls_menu, listen_for_keys).in_set(ControlsSet),
             toggle_pause_game.in_set(PlayingSet),
             toggle_pause_game.in_set(PausedSet),
             paused_menu.in_set(PausedSet),
