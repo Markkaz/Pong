@@ -23,15 +23,13 @@ impl Plugin for PongPlugin {
             ))
 
             .add_event::<ScorePointEvent>()
-
             .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
-            .add_plugins(RapierDebugRenderPlugin::default())
-
             .add_systems(OnEnter(GameState::Playing), setup_game)
             .add_systems(OnExit(GameState::Playing), cleanup_game)
             .add_systems(FixedUpdate, move_players.in_set(PlayingSet))
             .add_systems(Update, (
                 speed_up_ball,
+                ball_paddle_collision,
                 detect_point,
                 score_point,
                 update_score_display,

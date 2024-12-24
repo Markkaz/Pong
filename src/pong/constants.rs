@@ -12,4 +12,5 @@ pub mod ball {
     pub const RADIUS: f32 = 10.0;
     pub const INITIAL_VELOCITY: (f32, f32) = (200.0, 100.0);
     pub const SPEED_INCREASE: f32 = 1.1;
+    pub const MAX_BALL_SPEED: f32 = 1000.;
 }

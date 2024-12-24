@@ -282,6 +282,7 @@ pub mod scoring {
 }
 
 pub mod ball {
+    use std::f32::consts::PI;
     use super::*;
     pub fn speed_up(
         mut collision_events: EventReader<CollisionEvent>,
@@ -300,6 +301,31 @@ pub mod ball {
 
     fn adjust_velocity(velocity: &mut Velocity) {
         velocity.linvel.y *= constants::ball::SPEED_INCREASE;
+        velocity.linvel = velocity.linvel.clamp_length_max(constants::ball::MAX_BALL_SPEED);
+    }
+
+    pub fn paddle_collision(
+        mut collision_events: EventReader<CollisionEvent>,
+        mut ball_query: Query<(&Transform, &mut Velocity), With<Ball>>,
+        paddle_query: Query<&Transform, With<Paddle>>,
+    ) {
+        for event in collision_events.read() {
+            if let CollisionEvent::Started(entity1, entity2, _) = event {
+                if let Ok(paddle) = paddle_query.get(*entity1).or_else(|_| paddle_query.get(*entity2)) {
+
+                    let (ball_transform, mut ball_velocity) = ball_query.single_mut();
+
+                    let hit_position = (ball_transform.translation.y - paddle.translation.y) / (constants::paddle::HEIGHT / 2.0);
+                    let angle = hit_position * PI / 2.0;
+                    let speed = ball_velocity.linvel.length();
+
+                    ball_velocity.linvel.x = -ball_velocity.linvel.x;
+                    ball_velocity.linvel.y = angle.sin() * speed;
+
+                    ball_velocity.linvel = ball_velocity.linvel.normalize() * speed;
+                }
+            }
+        }
     }
 
     pub fn reset(
@@ -331,6 +357,7 @@ pub use setup::game as setup_game;
 pub use movement::players as move_players;
 pub use ball::{
     speed_up as speed_up_ball,
+    paddle_collision as ball_paddle_collision,
     reset as reset_ball,
 };
 pub use scoring::{
