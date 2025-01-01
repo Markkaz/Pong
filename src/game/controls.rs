@@ -3,16 +3,20 @@ use leafwing_input_manager::prelude::*;
 
 #[derive(Actionlike, Clone, Copy, PartialEq, Eq, Hash, Debug, Reflect)]
 pub enum GameAction {
-    Up,
-    Down,
+    Player1Up,
+    Player1Down,
+    Player2Up,
+    Player2Down,
     Menu,
 }
 
 impl GameAction {
     fn default_input_map() -> InputMap<GameAction> {
         let mut input_map = InputMap::default();
-        input_map.insert(Self::Up, KeyCode::ArrowUp);
-        input_map.insert(Self::Down, KeyCode::ArrowDown);
+        input_map.insert(Self::Player1Up, KeyCode::ArrowUp);
+        input_map.insert(Self::Player1Down, KeyCode::ArrowDown);
+        input_map.insert(Self::Player2Up, KeyCode::KeyW);
+        input_map.insert(Self::Player2Down, KeyCode::KeyS);
         input_map.insert(Self::Menu, KeyCode::Escape);
 
         input_map

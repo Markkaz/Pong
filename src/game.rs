@@ -1,10 +1,10 @@
 pub mod states;
 pub mod controls;
 pub mod settings;
+pub mod commands;
 
 use bevy::prelude::*;
 use controls::GameControlsPlugin;
-use settings::Difficulty;
 use states::GameStatesPlugin;
 
 pub struct GamePlugin;
@@ -15,7 +15,6 @@ impl Plugin for GamePlugin {
             .add_plugins((
                 GameStatesPlugin,
                 GameControlsPlugin,
-            ))
-            .init_resource::<Difficulty>();
+            ));
     }
 }

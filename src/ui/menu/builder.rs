@@ -5,6 +5,7 @@ use crate::ui::menu::style;
 
 pub struct MenuBuilder {
     heading: String,
+    top_spacing: f32,
     components: Vec<Box<dyn MenuComponent>>,
 }
 
@@ -13,7 +14,13 @@ impl MenuBuilder {
         Self {
             heading: heading.into(),
             components: Vec::new(),
+            top_spacing: 200.,
         }
+    }
+
+    pub fn with_top_spacing(mut self, top_spacing: f32) -> Self {
+        self.top_spacing = top_spacing;
+        self
     }
 
     pub fn add_component(mut self, component: impl MenuComponent + 'static) -> Self {
@@ -31,7 +38,7 @@ impl MenuBuilder {
     fn render_menu(&mut self, ctx: &egui::Context, commands: &mut Commands) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical_centered(|ui| {
-                ui.add_space(200.);
+                ui.add_space(self.top_spacing);
 
                 ui.heading(egui::RichText::new(&self.heading)
                     .size(style::HEADING_SIZE)

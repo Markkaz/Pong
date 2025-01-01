@@ -44,3 +44,35 @@ impl MenuAction for QuitMenuAction {
         commands.send_event(AppExit::Success);
     }
 }
+
+pub struct ClosureMenuAction<F> where F: Fn(&mut Commands) {
+    closure: F,
+}
+
+impl<F> ClosureMenuAction<F> where F: Fn(&mut Commands) {
+    pub fn new(closure: F) -> Self {
+        Self { closure }
+    }
+}
+
+impl<F> MenuAction for ClosureMenuAction<F> where F: Fn(&mut Commands) {
+    fn execute(&self, commands: &mut Commands) {
+        (self.closure)(commands);
+    }
+}
+
+pub struct CommandMenuAction<C> where C: Command+Clone {
+    command: C,
+}
+
+impl<C> CommandMenuAction<C> where C: Command+Clone {
+    pub fn new(command: C) -> Self {
+        Self { command }
+    }
+}
+
+impl<C> MenuAction for CommandMenuAction<C> where C: Command+Clone {
+    fn execute(&self, commands: &mut Commands) {
+        commands.queue(self.command.clone());
+    }
+}

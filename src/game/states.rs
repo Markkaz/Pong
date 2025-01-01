@@ -4,8 +4,8 @@ use bevy::prelude::*;
 pub enum GameState {
     #[default]
     Main,
-    Settings,
     Controls,
+    Startgame,
     Playing,
 }
 
@@ -19,9 +19,9 @@ pub enum PausedState {
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MainSet;
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct SettingsSet;
-#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ControlsSet;
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct StartGameSet;
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PlayingSet;
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
@@ -36,8 +36,8 @@ impl Plugin for GameStatesPlugin {
             .init_state::<PausedState>()
             .configure_sets(Update, (
                 MainSet.run_if(in_state(GameState::Main)),
-                SettingsSet.run_if(in_state(GameState::Settings)),
                 ControlsSet.run_if(in_state(GameState::Controls)),
+                StartGameSet.run_if(in_state(GameState::Startgame)),
                 PlayingSet
                     .run_if(in_state(GameState::Playing))
                     .run_if(in_state(PausedState::Playing)),

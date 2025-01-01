@@ -3,33 +3,33 @@ use super::components::ScoreField;
 
 #[derive(Resource)]
 pub struct Score {
-    player: u32,
-    computer: u32,
+    player1: u32,
+    player2: u32,
 }
 
 impl Score {
     pub fn reset(&mut self) {
-        self.player = 0;
-        self.computer = 0;
+        self.player1 = 0;
+        self.player2 = 0;
     }
 
     pub fn add_point(&mut self, field: &ScoreField) {
         match field {
-            ScoreField::Left => self.player += 1,
-            ScoreField::Right => self.computer += 1,
+            ScoreField::Left => self.player1 += 1,
+            ScoreField::Right => self.player2 += 1,
         }
     }
 
     pub fn display_text(&self) -> String {
-        format!("{} - {}", self.player, self.computer)
+        format!("{} - {}", self.player1, self.player2)
     }
 }
 
 impl Default for Score {
     fn default() -> Self {
         Self {
-            player: 0,
-            computer: 0,
+            player1: 0,
+            player2: 0,
         }
     }
 }

@@ -4,8 +4,8 @@ use bevy_rapier2d::rapier::prelude::CollisionEventFlags;
 use leafwing_input_manager::prelude::*;
 
 use crate::game::controls::GameAction;
-use crate::game::settings::Difficulty;
 use crate::game::states::PausedState;
+use crate::game::settings::Difficulty;
 
 use super::Score;
 use super::components::*;
@@ -13,6 +13,7 @@ use super::constants;
 
 
 pub mod setup {
+    use crate::game::settings::{GameSettings, PlayerType};
     use super::*;
 
     pub fn game(
@@ -22,6 +23,7 @@ pub mod setup {
         mut materials: ResMut<Assets<ColorMaterial>>,
         mut score: ResMut<Score>,
         mut next_state: ResMut<NextState<PausedState>>,
+        settings: Res<GameSettings>,
     ) {
         score.reset();
         next_state.set(PausedState::Playing);
@@ -29,7 +31,7 @@ pub mod setup {
         let window = windows.single();
         let (width, height) = (window.resolution.width(), window.resolution.height());
 
-        spawn_game_world(&mut commands, width, height, &mut meshes, &mut materials);
+        spawn_game_world(&mut commands, width, height, &mut meshes, &mut materials, settings);
     }
 
     fn spawn_game_world(
@@ -38,6 +40,7 @@ pub mod setup {
         height: f32,
         meshes: &mut ResMut<Assets<Mesh>>,
         materials: &mut ResMut<Assets<ColorMaterial>>,
+        settings: Res<GameSettings>,
     ) {
         commands.spawn((
             Pong,
@@ -45,7 +48,7 @@ pub mod setup {
             Visibility::default(),
         )).with_children(|builder| {
             create_board(builder, width, height, meshes, materials);
-            create_players(builder, width, meshes, materials);
+            create_players(builder, width, meshes, materials, settings);
             spawn_ball(builder, meshes, materials);
             create_score(builder, height);
         });
@@ -114,7 +117,8 @@ pub mod setup {
         meshes: &mut ResMut<Assets<Mesh>>,
         materials: &mut ResMut<Assets<ColorMaterial>>,
         transform: Transform,
-        paddle: Paddle,
+        player_type: PlayerType,
+        score_field: ScoreField,
     ) {
         builder.spawn((
             Mesh2d(meshes.add(Rectangle::new(
@@ -126,7 +130,8 @@ pub mod setup {
             Collider::cuboid(constants::paddle::WIDTH / 2.0, constants::paddle::HEIGHT / 2.0),
             RigidBody::KinematicPositionBased,
             KinematicCharacterController::default(),
-            paddle,
+            player_type,
+            score_field,
         ));
     }
 
@@ -135,17 +140,19 @@ pub mod setup {
         screen_width: f32,
         meshes: &mut ResMut<Assets<Mesh>>,
         materials: &mut ResMut<Assets<ColorMaterial>>,
+        settings: Res<GameSettings>,
     ) {
-        for (x_offset, paddle_type) in [
-            (screen_width / -2.0 + constants::paddle::BUFFER, Paddle::Player),
-            (screen_width / 2.0 - constants::paddle::BUFFER, Paddle::Computer),
+        for (x_offset, player_type, score_field) in [
+            (screen_width / -2.0 + constants::paddle::BUFFER, settings.get_player1(), ScoreField::Left),
+            (screen_width / 2.0 - constants::paddle::BUFFER, settings.get_player2(), ScoreField::Right),
         ] {
             create_paddle(
                 builder,
                 meshes,
                 materials,
                 Transform::from_xyz(x_offset, constants::TOP_BUFFER / -2.0, 0.0),
-                paddle_type,
+                player_type.clone(),
+                score_field,
             );
         }
     }
@@ -191,39 +198,50 @@ pub mod setup {
 }
 
 pub mod movement {
+    use crate::game::settings::PlayerType;
     use super::*;
 
     pub fn players(
         keys: Res<ActionState<GameAction>>,
-        difficulty: Res<Difficulty>,
-        mut players: Query<(&mut KinematicCharacterController, &Paddle, &Transform)>,
+        mut players: Query<(&mut KinematicCharacterController, &PlayerType, &Transform, &ScoreField)>,
         balls: Query<&Transform, With<Ball>>,
     ) {
         let ball = balls.single();
 
-        for (player, paddle, paddle_position) in players.iter_mut() {
-            match paddle {
-                Paddle::Player => handle_player_input(player, &keys),
-                Paddle::Computer => handle_computer_movement(player, paddle_position, ball, *difficulty),
+        for (player, player_type, paddle_position, score_field) in players.iter_mut() {
+            match player_type {
+                PlayerType::Human => handle_player_input(player, score_field, &keys),
+                PlayerType::Computer(difficulty) => handle_computer_movement(player, paddle_position, ball, *difficulty),
             }
         }
     }
 
     fn handle_player_input(
         mut player: Mut<KinematicCharacterController>,
+        score_field: &ScoreField,
         keys: &Res<ActionState<GameAction>>,
     ) {
         let direction = Vec2::new(
             0.,
-            get_input_direction(keys) * constants::paddle::SPEED
+            get_input_direction(score_field, keys) * constants::paddle::SPEED
         );
         player.translation = Some(direction);
     }
 
-    fn get_input_direction(keys: &Res<ActionState<GameAction>>) -> f32 {
+    fn get_input_direction(score_field: &ScoreField, keys: &Res<ActionState<GameAction>>) -> f32 {
         let mut direction = 0.0;
-        if keys.pressed(&GameAction::Up) { direction += 1.0; }
-        if keys.pressed(&GameAction::Down) { direction -= 1.0; }
+
+        match score_field {
+            ScoreField::Left => {
+                if keys.pressed(&GameAction::Player1Up) { direction += 1.0; }
+                if keys.pressed(&GameAction::Player1Down) { direction -= 1.0; }
+            },
+            ScoreField::Right => {
+                if keys.pressed(&GameAction::Player2Up) { direction += 1.0; }
+                if keys.pressed(&GameAction::Player2Down) { direction -= 1.0; }
+            }
+        }
+
         direction
     }
 
@@ -245,6 +263,7 @@ pub mod movement {
 }
 
 pub mod scoring {
+    use crate::game::settings::PlayerType;
     use super::*;
 
     pub fn detect_point(
@@ -262,7 +281,7 @@ pub mod scoring {
 
     pub fn update_score(
         mut score: ResMut<Score>,
-        walls: Query<&ScoreField>,
+        walls: Query<&ScoreField, Without<PlayerType>>,
         mut point_events: EventReader<ScorePointEvent>
     ) {
         for ScorePointEvent(entity) in point_events.read() {
@@ -283,6 +302,7 @@ pub mod scoring {
 
 pub mod ball {
     use std::f32::consts::PI;
+    use crate::game::settings::PlayerType;
     use super::*;
     pub fn speed_up(
         mut collision_events: EventReader<CollisionEvent>,
@@ -307,7 +327,7 @@ pub mod ball {
     pub fn paddle_collision(
         mut collision_events: EventReader<CollisionEvent>,
         mut ball_query: Query<(&Transform, &mut Velocity), With<Ball>>,
-        paddle_query: Query<&Transform, With<Paddle>>,
+        paddle_query: Query<&Transform, With<PlayerType>>,
     ) {
         for event in collision_events.read() {
             if let CollisionEvent::Started(entity1, entity2, _) = event {

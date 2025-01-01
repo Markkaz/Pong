@@ -4,64 +4,27 @@ use leafwing_input_manager::prelude::*;
 
 use crate::game::{
     states::{
-        GameState, PausedState,
-        MainSet, SettingsSet, ControlsSet, PlayingSet, PausedSet
+        GameState, PausedState, StartGameSet,
+        MainSet, ControlsSet, PlayingSet, PausedSet
     },
     controls::{GameAction, ControlRemapping, listen_for_keys},
-    settings::Difficulty,
+    settings::{GameSettings, Difficulty, PlayerType},
 };
-
+use crate::game::commands::UpdatePlayerCommand;
 use crate::ui::menu::{
     builder::MenuBuilder,
     components::{MenuButton, MenuLabel, MenuLayoutHorizontal, MenuSelectableLabel},
-    actions::{ChangeStateMenuAction, QuitMenuAction, UpdateResourceMenuAction}
+    actions::{ChangeStateMenuAction, QuitMenuAction, UpdateResourceMenuAction, CommandMenuAction}
 };
 
 fn main_menu(mut commands: Commands, contexts: EguiContexts) {
     let builder = MenuBuilder::new("Pong!");
     builder.add_component(
-        MenuButton::new("Start Game", ChangeStateMenuAction::new(GameState::Playing)),
-    ).add_component(
-        MenuButton::new("Settings", ChangeStateMenuAction::new(GameState::Settings)),
-    ).add_component(
-        MenuButton::new("Quit Game", QuitMenuAction),
-    ).build(contexts, &mut commands);
-}
-
-fn settings_menu(
-    mut commands: Commands,
-    contexts: EguiContexts,
-    difficulty: ResMut<Difficulty>,
-) {
-    let builder = MenuBuilder::new("Settings");
-    builder.add_component(
-        MenuLayoutHorizontal::new()
-            .add_component(MenuLabel::new("Difficulty: "))
-            .add_component(
-                MenuSelectableLabel::new(
-                    "Easy",
-                    difficulty.as_ref() == &Difficulty::Easy,
-                    UpdateResourceMenuAction::new(Difficulty::Easy)
-                )
-            )
-            .add_component(
-                MenuSelectableLabel::new(
-                    "Difficult",
-                    difficulty.as_ref() == &Difficulty::Difficult,
-                    UpdateResourceMenuAction::new(Difficulty::Difficult)
-                )
-            )
-            .add_component(
-                MenuSelectableLabel::new(
-                    "Impossible",
-                    difficulty.as_ref() == &Difficulty::Impossible,
-                    UpdateResourceMenuAction::new(Difficulty::Impossible)
-                )
-            )
+        MenuButton::new("Start Game", ChangeStateMenuAction::new(GameState::Startgame)),
     ).add_component(
         MenuButton::new("Controls", ChangeStateMenuAction::new(GameState::Controls)),
     ).add_component(
-        MenuButton::new("Back", ChangeStateMenuAction::new(GameState::Main)),
+        MenuButton::new("Quit Game", QuitMenuAction),
     ).build(contexts, &mut commands);
 }
 
@@ -78,31 +41,98 @@ fn controls_menu(
     contexts: EguiContexts,
     keys: Res<InputMap<GameAction>>,
 ) {
-    let editable_controls = [GameAction::Up, GameAction::Down, GameAction::Menu];
+    let mut builder = MenuBuilder::new("Controls")
+        .with_top_spacing(25.)
+        .add_component(MenuLabel::new("Player 1:"));
 
-    let mut builder = MenuBuilder::new("Controls");
+    builder = control_selection_button(&keys, builder, GameAction::Player1Up);
+    builder = control_selection_button(&keys, builder, GameAction::Player1Down);
+    builder = builder.add_component(MenuLabel::new("Player 2:"));
+    builder = control_selection_button(&keys, builder, GameAction::Player2Up);
+    builder = control_selection_button(&keys, builder, GameAction::Player2Down);
+    builder = builder.add_component(MenuLabel::new(""));
 
-    for control in editable_controls {
-        let current_keys = keys.get(&control)
-            .map(|key_set| {
-                key_set.iter().filter_map(|key| {
-                    match key {
-                        UserInputWrapper::Button(button) => Some(format!("{:?}", button)),
-                        _ => None,
-                    }
-                }).collect::<Vec<String>>().join(", ")
-            }).unwrap_or_else(|| "[Not Set]".to_string());
-
-        builder = builder.add_component(
-            MenuLayoutHorizontal::new()
-                .add_component(MenuLabel::new(format!("{:?}", control)))
-                .add_component(MenuButton::new(current_keys, UpdateResourceMenuAction::new(ControlRemapping::start_remapping(control)))),
-        );
-    }
+    builder = control_selection_button(&keys, builder, GameAction::Menu);
 
     builder.add_component(
-        MenuButton::new("Back", ChangeStateMenuAction::new(GameState::Settings)),
+        MenuButton::new("Back", ChangeStateMenuAction::new(GameState::Main)),
     ).build(contexts, &mut commands);
+}
+
+fn control_selection_button(keys: &Res<InputMap<GameAction>>, builder: MenuBuilder, control: GameAction) -> MenuBuilder {
+    let current_keys = keys.get(&control)
+        .map(|key_set| {
+            key_set.iter().filter_map(|key| {
+                match key {
+                    UserInputWrapper::Button(button) => Some(format!("{:?}", button)),
+                    _ => None,
+                }
+            }).collect::<Vec<String>>().join(", ")
+        }).unwrap_or_else(|| "[Not Set]".to_string());
+
+    builder.add_component(
+        MenuLayoutHorizontal::new()
+            .add_component(MenuLabel::new(format!("{:?}", control)))
+            .add_component(MenuButton::new(current_keys, UpdateResourceMenuAction::new(ControlRemapping::start_remapping(control)))),
+    )
+}
+
+fn init_start_game_menu(mut commands: Commands) {
+    commands.init_resource::<GameSettings>();
+}
+
+fn start_game_menu(mut commands: Commands, contexts: EguiContexts, settings: ResMut<GameSettings>) {
+    MenuBuilder::new("New Game")
+        .with_top_spacing(100.)
+        .add_component(MenuLabel::new("Player 1"))
+        .add_component(MenuLayoutHorizontal::new()
+            .add_component(MenuSelectableLabel::new(
+                "Human",
+                matches!(settings.get_player1(), PlayerType::Human),
+                CommandMenuAction::new(UpdatePlayerCommand::new(1, PlayerType::Human))
+            ))
+            .add_component(MenuSelectableLabel::new(
+                "Easy",
+                matches!(settings.get_player1(), PlayerType::Computer(difficulty) if difficulty == &Difficulty::Easy),
+                CommandMenuAction::new(UpdatePlayerCommand::new(1, PlayerType::Computer(Difficulty::Easy)))
+            ))
+            .add_component(MenuSelectableLabel::new(
+                "Difficult",
+                matches!(settings.get_player1(), PlayerType::Computer(difficulty) if difficulty == &Difficulty::Difficult),
+                CommandMenuAction::new(UpdatePlayerCommand::new(1, PlayerType::Computer(Difficulty::Difficult)))
+            ))
+            .add_component(MenuSelectableLabel::new(
+                "Impossible",
+                matches!(settings.get_player1(), PlayerType::Computer(difficulty) if difficulty == &Difficulty::Impossible),
+                CommandMenuAction::new(UpdatePlayerCommand::new(1, PlayerType::Computer(Difficulty::Impossible)))
+            ))
+        )
+        .add_component(MenuLabel::new("Player 2"))
+        .add_component(MenuLayoutHorizontal::new()
+            .add_component(MenuSelectableLabel::new(
+                "Human",
+                matches!(settings.get_player2(), PlayerType::Human),
+                CommandMenuAction::new(UpdatePlayerCommand::new(2, PlayerType::Human))
+            ))
+            .add_component(MenuSelectableLabel::new(
+                "Easy",
+                matches!(settings.get_player2(), PlayerType::Computer(difficulty) if difficulty == &Difficulty::Easy),
+                CommandMenuAction::new(UpdatePlayerCommand::new(2, PlayerType::Computer(Difficulty::Easy)))
+            ))
+            .add_component(MenuSelectableLabel::new(
+                "Difficult",
+                matches!(settings.get_player2(), PlayerType::Computer(difficulty) if difficulty == &Difficulty::Difficult),
+                CommandMenuAction::new(UpdatePlayerCommand::new(2, PlayerType::Computer(Difficulty::Difficult)))
+            ))
+            .add_component(MenuSelectableLabel::new(
+                "Impossible",
+                matches!(settings.get_player2(), PlayerType::Computer(difficulty) if difficulty == &Difficulty::Impossible),
+                CommandMenuAction::new(UpdatePlayerCommand::new(2, PlayerType::Computer(Difficulty::Impossible)))
+            ))
+        )
+        .add_component(MenuButton::new("Start Game", ChangeStateMenuAction::new(GameState::Playing)))
+        .add_component(MenuButton::new("Back", ChangeStateMenuAction::new(GameState::Main)))
+        .build(contexts, &mut commands);
 }
 
 fn toggle_pause_game(
@@ -134,9 +164,10 @@ impl Plugin for MenuSystemsPlugin {
         app.add_plugins(EguiPlugin)
             .add_systems(OnEnter(GameState::Controls), init_controls_menu)
             .add_systems(OnExit(GameState::Controls), destroy_controls_menu)
+            .add_systems(OnEnter(GameState::Startgame), init_start_game_menu)
             .add_systems(Update, (
+                start_game_menu.in_set(StartGameSet),
                 main_menu.in_set(MainSet),
-                settings_menu.in_set(SettingsSet),
                 (controls_menu, listen_for_keys).in_set(ControlsSet),
                 toggle_pause_game.in_set(PlayingSet),
                 (toggle_pause_game, paused_menu).in_set(PausedSet)
