@@ -2,14 +2,14 @@ mod components;
 mod systems;
 mod resources;
 mod constants;
+mod observers;
 
 use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
 
 use crate::game::states::{GameState, PausedState, PlayingSet};
-use crate::pong::components::{ScorePointEvent};
-use crate::pong::resources::Score;
-use crate::pong::systems::*;
+use observers::*;
+use systems::*;
 
 pub struct PongPlugin;
 
@@ -22,8 +22,11 @@ impl Plugin for PongPlugin {
                     .run_if(in_state(PausedState::Playing)),
             ))
 
-            .add_event::<ScorePointEvent>()
+            .add_event::<OnPointScored>()
             .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
+            .add_observer(score_point)
+            .add_observer(reset_ball)
+            .add_observer(end_game)
             .add_systems(OnEnter(GameState::Playing), setup_game)
             .add_systems(OnExit(GameState::Playing), cleanup_game)
             .add_systems(FixedUpdate, move_players.in_set(PlayingSet))
@@ -31,9 +34,9 @@ impl Plugin for PongPlugin {
                 speed_up_ball,
                 ball_paddle_collision,
                 detect_point,
-                score_point,
                 update_score_display,
-                reset_ball,
             ).in_set(PlayingSet));
     }
 }
+
+pub use resources::Score;

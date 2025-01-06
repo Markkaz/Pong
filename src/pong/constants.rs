@@ -1,6 +1,10 @@
  pub const WALL_THICKNESS: f32 = 10.0;
 pub const TOP_BUFFER: f32 = 100.0;
 
+ pub mod game {
+     pub const MAX_SCORE: u32 = 5;
+ }
+
 pub mod paddle {
     pub const WIDTH: f32 = 10.0;
     pub const HEIGHT: f32 = 100.0;

@@ -5,12 +5,14 @@ use leafwing_input_manager::prelude::*;
 use crate::game::{
     states::{
         GameState, PausedState, StartGameSet,
-        MainSet, ControlsSet, PlayingSet, PausedSet
+        MainSet, ControlsSet, PlayingSet, PausedSet,
+        EndgameSet,
     },
     controls::{GameAction, ControlRemapping, listen_for_keys},
     settings::{GameSettings, Difficulty, PlayerType},
+    commands::UpdatePlayerCommand,
 };
-use crate::game::commands::UpdatePlayerCommand;
+use crate::pong::Score;
 use crate::ui::menu::{
     builder::MenuBuilder,
     components::{MenuButton, MenuLabel, MenuLayoutHorizontal, MenuSelectableLabel},
@@ -157,6 +159,17 @@ fn paused_menu(mut commands: Commands, contexts: EguiContexts)  {
     ).build(contexts, &mut commands);
 }
 
+fn end_game_menu(mut commands: Commands, contexts: EguiContexts, score: Res<Score>)  {
+    let title = format!("{} wins!", score.get_winner());
+
+    let builder = MenuBuilder::new(title);
+    builder.add_component(
+        MenuButton::new("Restart", ChangeStateMenuAction::new(GameState::Playing))
+    ).add_component(
+        MenuButton::new("Quit", ChangeStateMenuAction::new(GameState::Main))
+    ).build(contexts, &mut commands);
+}
+
 pub struct MenuSystemsPlugin;
 
 impl Plugin for MenuSystemsPlugin {
@@ -170,7 +183,8 @@ impl Plugin for MenuSystemsPlugin {
                 main_menu.in_set(MainSet),
                 (controls_menu, listen_for_keys).in_set(ControlsSet),
                 toggle_pause_game.in_set(PlayingSet),
-                (toggle_pause_game, paused_menu).in_set(PausedSet)
+                (toggle_pause_game, paused_menu).in_set(PausedSet),
+                end_game_menu.in_set(EndgameSet),
             ));
     }
 }

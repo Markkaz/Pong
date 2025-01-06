@@ -11,6 +11,3 @@ pub enum ScoreField {
     Left,
     Right,
 }
-
-#[derive(Event)]
-pub struct ScorePointEvent(pub Entity);

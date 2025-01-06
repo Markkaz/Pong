@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use crate::pong::constants::game::MAX_SCORE;
 use super::components::ScoreField;
 
 #[derive(Resource)]
@@ -22,6 +23,15 @@ impl Score {
 
     pub fn display_text(&self) -> String {
         format!("{} - {}", self.player1, self.player2)
+    }
+
+    pub fn is_game_end(&self) -> bool {
+        self.player1 >= MAX_SCORE || self.player2 >= MAX_SCORE
+    }
+
+    pub fn get_winner(&self) -> String {
+        if self.player1 >= MAX_SCORE { "Player 1".into() }
+        else { "Player 2".into() }
     }
 }
 

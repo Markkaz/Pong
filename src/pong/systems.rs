@@ -3,17 +3,19 @@ use bevy_rapier2d::prelude::*;
 use bevy_rapier2d::rapier::prelude::CollisionEventFlags;
 use leafwing_input_manager::prelude::*;
 
+use std::f32::consts::PI;
+
 use crate::game::controls::GameAction;
 use crate::game::states::PausedState;
-use crate::game::settings::Difficulty;
+use crate::game::settings::{GameSettings, Difficulty, PlayerType};
 
 use super::Score;
 use super::components::*;
 use super::constants;
+use super::observers::OnPointScored;
 
 
 pub mod setup {
-    use crate::game::settings::{GameSettings, PlayerType};
     use super::*;
 
     pub fn game(
@@ -198,7 +200,6 @@ pub mod setup {
 }
 
 pub mod movement {
-    use crate::game::settings::PlayerType;
     use super::*;
 
     pub fn players(
@@ -263,30 +264,23 @@ pub mod movement {
 }
 
 pub mod scoring {
-    use crate::game::settings::PlayerType;
     use super::*;
 
     pub fn detect_point(
+        mut commands: Commands,
         mut collision_events: EventReader<CollisionEvent>,
-        mut ev_score_point: EventWriter<ScorePointEvent>
+        mut walls_query: Query<Entity, (With<ScoreField>, Without<PlayerType>)>
     ) {
         for event in collision_events.read() {
-            if let CollisionEvent::Started(entity, _, flags) = event {
-                if *flags & CollisionEventFlags::SENSOR != CollisionEventFlags::empty() {
-                    ev_score_point.send(ScorePointEvent(*entity));
-                }
-            }
-        }
-    }
+            let (entity1, entity2, flags) = match event {
+                CollisionEvent::Started(e1, e2, flags) => (e1, e2, flags),
+                CollisionEvent::Stopped(_, _, _) => continue,
+            };
 
-    pub fn update_score(
-        mut score: ResMut<Score>,
-        walls: Query<&ScoreField, Without<PlayerType>>,
-        mut point_events: EventReader<ScorePointEvent>
-    ) {
-        for ScorePointEvent(entity) in point_events.read() {
-            if let Ok(wall) = walls.get(*entity) {
-                score.add_point(wall);
+            if *flags & CollisionEventFlags::SENSOR != CollisionEventFlags::SENSOR { continue; }
+
+            if let Ok(wall) = walls_query.get(*entity1).or_else(|_| walls_query.get(*entity2)) {
+                commands.trigger(OnPointScored(wall));
             }
         }
     }
@@ -301,8 +295,6 @@ pub mod scoring {
 }
 
 pub mod ball {
-    use std::f32::consts::PI;
-    use crate::game::settings::PlayerType;
     use super::*;
     pub fn speed_up(
         mut collision_events: EventReader<CollisionEvent>,
@@ -347,24 +339,6 @@ pub mod ball {
             }
         }
     }
-
-    pub fn reset(
-        mut score_point_event: EventReader<ScorePointEvent>,
-        mut commands: Commands,
-        mut meshes: ResMut<Assets<Mesh>>,
-        mut materials: ResMut<Assets<ColorMaterial>>,
-        ball_entity: Query<Entity, With<Ball>>,
-        pong_entity: Query<Entity, With<Pong>>,
-    ) {
-        for _ in score_point_event.read() {
-            commands.entity(ball_entity.single()).despawn();
-
-            let pong = pong_entity.single();
-            commands.entity(pong).with_children(|parent| {
-                super::setup::spawn_ball(parent, &mut meshes, &mut materials);
-            });
-        }
-    }
 }
 
 pub fn cleanup_game(mut commands: Commands, pong: Query<Entity, With<Pong>>) {
@@ -378,10 +352,8 @@ pub use movement::players as move_players;
 pub use ball::{
     speed_up as speed_up_ball,
     paddle_collision as ball_paddle_collision,
-    reset as reset_ball,
 };
 pub use scoring::{
     detect_point,
-    update_score as score_point,
     update_display as update_score_display,
 };

@@ -7,6 +7,7 @@ pub enum GameState {
     Controls,
     Startgame,
     Playing,
+    Endgame,
 }
 
 #[derive(States, Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -26,6 +27,8 @@ pub struct StartGameSet;
 pub struct PlayingSet;
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PausedSet;
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct EndgameSet;
 
 pub struct GameStatesPlugin;
 
@@ -44,6 +47,7 @@ impl Plugin for GameStatesPlugin {
                 PausedSet
                     .run_if(in_state(GameState::Playing))
                     .run_if(in_state(PausedState::Paused)),
+                EndgameSet.run_if(in_state(GameState::Endgame)),
             ))
             .configure_sets(FixedUpdate,
                 PlayingSet
