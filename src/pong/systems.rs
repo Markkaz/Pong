@@ -185,11 +185,11 @@ pub mod setup {
             Sleeping::disabled(),
             Collider::ball(constants::ball::RADIUS),
             Restitution {
-                coefficient: 1.,
+                coefficient: 0.99,
                 combine_rule: CoefficientCombineRule::Max,
             },
             Friction {
-                coefficient: 0.,
+                coefficient: 0.01,
                 combine_rule: CoefficientCombineRule::Min,
             },
             ActiveEvents::COLLISION_EVENTS,
@@ -340,7 +340,7 @@ pub mod ball {
                     let speed = ball_velocity.linvel.length();
 
                     ball_velocity.linvel.x = -ball_velocity.linvel.x;
-                    ball_velocity.linvel.y = angle.sin() * speed;
+                    ball_velocity.linvel.y = angle * speed;
 
                     ball_velocity.linvel = ball_velocity.linvel.normalize() * speed;
                 }

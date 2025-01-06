@@ -15,8 +15,8 @@ impl Score {
 
     pub fn add_point(&mut self, field: &ScoreField) {
         match field {
-            ScoreField::Left => self.player1 += 1,
-            ScoreField::Right => self.player2 += 1,
+            ScoreField::Right => self.player1 += 1,
+            ScoreField::Left => self.player2 += 1,
         }
     }
 
